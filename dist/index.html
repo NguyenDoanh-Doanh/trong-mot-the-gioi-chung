@@ -155,10 +155,60 @@ async function prepareGirl(){
  const length=view.getUint32(12,true), offset=28+length;
  const model=JSON.parse(new TextDecoder().decode(new Uint8Array(buffer,20,length)));
  for(const material of model.materials){material.alphaMode='MASK';material.alphaCutoff=.5}
+ const chunks=[buffer.slice(offset)];
+ let byteOffset=chunks[0].byteLength;
+ function appendAccessor(data,componentType,type,count,bounds={}){
+  const bufferView=model.bufferViews.push({buffer:0,byteOffset,byteLength:data.byteLength})-1;
+  chunks.push(data);
+  byteOffset+=data.byteLength;
+  return model.accessors.push({bufferView,componentType,type,count,...bounds})-1;
+ }
+ const times=Array.from({length:17},(_,i)=>i/16);
+ const input=appendAccessor(new Float32Array(times),5126,'SCALAR',17,{min:[0],max:[1]});
+ const walk={name:'Gallery Walk',channels:[],samplers:[]};
+ const root=model.nodes[1];
+ for(const [meshIndex,isArm] of [[2,false],[3,true]]){
+  const original=model.meshes[meshIndex].primitives[0];
+  const index=model.accessors[original.indices];
+  const position=model.accessors[original.attributes.POSITION];
+  const indexView=model.bufferViews[index.bufferView];
+  const positionView=model.bufferViews[position.bufferView];
+  const triangles=new Uint32Array(buffer,offset+(indexView.byteOffset||0)+(index.byteOffset||0),index.count);
+  const positionStart=offset+(positionView.byteOffset||0)+(position.byteOffset||0);
+  const groups=[[],[],[]];
+  for(let i=0;i<triangles.length;i+=3){
+   const triangle=triangles.subarray(i,i+3);
+   const x=(triangle.reduce((sum,k)=>sum+view.getFloat32(positionStart+k*(positionView.byteStride||12),true),0))/3;
+   const group=isArm?(x<-11.46?0:x>-10.54?1:2):(x<-11?0:1);
+   groups[group].push(...triangle);
+  }
+  const addIndices=indices=>appendAccessor(new Uint32Array(indices),5125,'SCALAR',indices.length);
+  const originalNode=model.nodes.find(node=>node.mesh===meshIndex);
+  if(groups[2].length)model.meshes[meshIndex].primitives=[{...original,indices:addIndices(groups[2])}];
+  else delete originalNode.mesh;
+  groups.slice(0,2).forEach((indices,side)=>{
+   const pivot=[isArm?(side?-10.47:-11.53):(side?-10.65:-11.35),-10.53,isArm?3.52:2.40];
+   const mesh=model.meshes.push({primitives:[{...original,indices:addIndices(indices)}]})-1;
+   const child=model.nodes.push({mesh,translation:pivot.map(value=>-value)})-1;
+   const node=model.nodes.push({translation:pivot,children:[child]})-1;
+   root.children.push(node);
+   const amplitude=(side?1:-1)*(isArm?-.22:.38);
+   const rotations=times.flatMap(t=>{
+    const half=Math.sin(t*2*Math.PI)*amplitude/2;
+    return [Math.sin(half),0,0,Math.cos(half)];
+   });
+   const output=appendAccessor(new Float32Array(rotations),5126,'VEC4',17);
+   const sampler=walk.samplers.push({input,output})-1;
+   walk.channels.push({sampler,target:{node,path:'rotation'}});
+  });
+ }
+ model.animations=[walk];
+ model.buffers[0].byteLength=byteOffset;
  const json=new TextEncoder().encode(JSON.stringify(model)), size=Math.ceil(json.length/4)*4;
- const header=buffer.slice(0,20), head=new DataView(header);
- head.setUint32(8,20+size+buffer.byteLength-20-length,true);head.setUint32(12,size,true);
- return URL.createObjectURL(new Blob([header,json,' '.repeat(size-json.length),buffer.slice(20+length)],{type:'model/gltf-binary'}));
+ const header=buffer.slice(0,20), head=new DataView(header), bin=buffer.slice(offset-8,offset);
+ head.setUint32(8,28+size+byteOffset,true);head.setUint32(12,size,true);
+ new DataView(bin).setUint32(0,byteOffset,true);
+ return URL.createObjectURL(new Blob([header,json,' '.repeat(size-json.length),bin,...chunks],{type:'model/gltf-binary'}));
 }
 async function prepareBoy(){
  const response=await fetch('roblox-bacon-hair.glb');

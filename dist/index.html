@@ -180,12 +180,14 @@ async function prepareBoy(){
  // Swing around the character's lateral axis, expressed in each joint's parent space.
  const joints=[
   [19,[-.0377,.948579,-.314289],-.22],[27,[.002022,-.948579,.316535],.22],
-  [34,[1,0,0],.34],[39,[1,0,0],-.34]
+  [34,[1,0,0],.46],[39,[1,0,0],-.46],
+  [35,[-.985526,.169524,0],.36,true],[40,[-.985543,-.169424,0],-.36,true]
  ];
- for(const [node,axis,amplitude] of joints){
+ for(const [node,axis,amplitude,knee=false] of joints){
   const [x,y,z,w]=model.nodes[node].rotation||[0,0,0,1];
   const values=times.flatMap(t=>{
-   const half=Math.sin(2*Math.PI*t)*amplitude/2;
+   const swing=Math.sin(2*Math.PI*t)*amplitude;
+   const half=(knee?Math.max(0,swing):swing)/2;
    const [a,b,c]=axis.map(v=>v*Math.sin(half)),d=Math.cos(half);
    return [d*x+a*w+b*z-c*y,d*y-a*z+b*w+c*x,d*z+a*y-b*x+c*w,d*w-a*x-b*y-c*z];
   });
@@ -204,6 +206,14 @@ async function prepareBoy(){
  return URL.createObjectURL(new Blob([glb,json,' '.repeat(padded-json.length),bin,...chunks],{type:'model/gltf-binary'}));
 }
 let boySource;
+character.addEventListener('load',()=>{
+ const walk='Gallery Walk';
+ if(character.availableAnimations.includes(walk)){
+  character.animationCrossfadeDuration=0;
+  character.animationName=walk;
+  character.pause();
+ }
+});
 const girlSource=prepareGirl().catch(()=>'roblox-bacon-hair-girl.glb');
 girlSource.then(url=>characterPicker.querySelector('[data-character="roblox-bacon-hair-girl"] model-viewer').src=url);
 characterPicker.showModal();

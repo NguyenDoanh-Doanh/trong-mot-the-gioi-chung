@@ -271,6 +271,7 @@ characterPicker.addEventListener('cancel',event=>event.preventDefault());
 for(const option of characterPicker.querySelectorAll('[data-character]')){
  option.onclick=async()=>{
   character.src=option.dataset.character==='roblox-bacon-hair-girl'?await girlSource:await (boySource??=prepareBoy().catch(()=> 'roblox-bacon-hair.glb'));
+  character.setAttribute('camera-orbit',option.dataset.character==='roblox-bacon-hair-girl'?'0deg 84deg auto':'180deg 84deg auto');
   character.alt=option.textContent.trim();
   characterPicker.close();
  };

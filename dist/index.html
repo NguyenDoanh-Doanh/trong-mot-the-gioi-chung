@@ -23,7 +23,7 @@ function detailWindow(img){
   if(wasDrag)return;
   if(img!==rawImg){openArtwork(img.src,img.alt);return}
   const px=100*e.offsetX/frame.clientWidth,py=100*e.offsetY/frame.clientHeight;
-  resetDetail();img.style.transformOrigin=px+"% "+py+"%";img.style.transform="scale(1.5)";enlarged=img
+  resetDetail();img.style.transformOrigin=px+"% "+py+"%";img.style.transform="scale(2)";enlarged=img
  };
  return frame
 }

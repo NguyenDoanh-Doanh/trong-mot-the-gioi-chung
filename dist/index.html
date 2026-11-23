@@ -160,13 +160,57 @@ async function prepareGirl(){
  head.setUint32(8,20+size+buffer.byteLength-20-length,true);head.setUint32(12,size,true);
  return URL.createObjectURL(new Blob([header,json,' '.repeat(size-json.length),buffer.slice(20+length)],{type:'model/gltf-binary'}));
 }
+async function prepareBoy(){
+ const response=await fetch('roblox-bacon-hair.glb');
+ if(!response.ok)throw Error('Model download failed');
+ const buffer=await response.arrayBuffer(), header=new DataView(buffer);
+ const length=header.getUint32(12,true), start=length+28;
+ const model=JSON.parse(new TextDecoder().decode(new Uint8Array(buffer,20,length)));
+ const chunks=[buffer.slice(start)];
+ let offset=chunks[0].byteLength;
+ function track(values,type,count,bounds={}){
+  const data=new Float32Array(values), bufferView=model.bufferViews.length;
+  model.bufferViews.push({buffer:0,byteOffset:offset,byteLength:data.byteLength});
+  chunks.push(data);offset+=data.byteLength;
+  return model.accessors.push({bufferView,componentType:5126,count,type,...bounds})-1;
+ }
+ const times=Array.from({length:17},(_,i)=>i/16);
+ const input=track(times,'SCALAR',17,{min:[0],max:[1]});
+ const walk={name:'Gallery Walk',samplers:[],channels:[]};
+ // Swing around the character's lateral axis, expressed in each joint's parent space.
+ const joints=[
+  [19,[-.0377,.948579,-.314289],-.22],[27,[.002022,-.948579,.316535],.22],
+  [34,[1,0,0],.34],[39,[1,0,0],-.34]
+ ];
+ for(const [node,axis,amplitude] of joints){
+  const [x,y,z,w]=model.nodes[node].rotation||[0,0,0,1];
+  const values=times.flatMap(t=>{
+   const half=Math.sin(2*Math.PI*t)*amplitude/2;
+   const [a,b,c]=axis.map(v=>v*Math.sin(half)),d=Math.cos(half);
+   return [d*x+a*w+b*z-c*y,d*y-a*z+b*w+c*x,d*z+a*y-b*x+c*w,d*w-a*x-b*y-c*z];
+  });
+  const sampler=walk.samplers.push({input,output:track(values,'VEC4',17)})-1;
+  walk.channels.push({sampler,target:{node,path:'rotation'}});
+ }
+ model.animations=[walk];
+ model.buffers[0].byteLength=offset;
+ const json=new TextEncoder().encode(JSON.stringify(model));
+ const padded=Math.ceil(json.length/4)*4;
+ const glb=buffer.slice(0,20), bin=buffer.slice(length+20,start);
+ const glbHeader=new DataView(glb);
+ glbHeader.setUint32(8,28+padded+offset,true);
+ glbHeader.setUint32(12,padded,true);
+ new DataView(bin).setUint32(0,offset,true);
+ return URL.createObjectURL(new Blob([glb,json,' '.repeat(padded-json.length),bin,...chunks],{type:'model/gltf-binary'}));
+}
+let boySource;
 const girlSource=prepareGirl().catch(()=>'roblox-bacon-hair-girl.glb');
 girlSource.then(url=>characterPicker.querySelector('[data-character="roblox-bacon-hair-girl"] model-viewer').src=url);
 characterPicker.showModal();
 characterPicker.addEventListener('cancel',event=>event.preventDefault());
 for(const option of characterPicker.querySelectorAll('[data-character]')){
  option.onclick=async()=>{
-  character.src=option.dataset.character==='roblox-bacon-hair-girl'?await girlSource:option.dataset.character+'.glb';
+  character.src=option.dataset.character==='roblox-bacon-hair-girl'?await girlSource:await (boySource??=prepareBoy().catch(()=> 'roblox-bacon-hair.glb'));
   character.alt=option.textContent.trim();
   characterPicker.close();
  };
@@ -184,7 +228,10 @@ function camera(focal){
   cx+=dx*distance;cz+=dz*distance;cy=22;tilt=pitch-Math.atan2(118,distance);
   avatar.style.transform=plane(x,250,z,'rotateY('+(-yaw)+'rad)');
   character.style.transform='translateY('+(-Math.abs(Math.sin(stride))*weight*5)+'px) rotate('+Math.sin(stride)*weight*2+'deg)';
-  // Keep the model in its rest pose while the gallery animates each step.
+  if(character.availableAnimations?.includes('Gallery Walk')){
+   const cycle=(stride/(2*Math.PI))%1;
+   character.currentTime=weight>.05?cycle:0;
+  }
  }
  return 'translateZ('+focal+'px) rotateX('+tilt+'rad) rotateY('+yaw+'rad) translate3d('+(-cx)+'px,'+(-cy)+'px,'+(-cz)+'px)'
 }

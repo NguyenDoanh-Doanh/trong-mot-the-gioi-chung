@@ -1,6 +1,6 @@
-<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Tay cầm phòng tranh</title><style>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Gallery Controller</title><style>
 *{box-sizing:border-box}body{margin:0;min-height:100svh;background:#232b29;color:#f4ead5;font:16px system-ui;text-align:center;display:grid;align-content:center;gap:12px;padding:18px}h1{font:32px Georgia;margin:0}button,input{font:inherit;padding:9px 12px;border:1px solid #beb19b;border-radius:6px}button{background:#e6dbc3;color:#272e28}input{width:13ch;text-transform:uppercase}main{display:flex;justify-content:space-evenly;gap:12px}section{display:grid;justify-items:center;gap:12px}.stick{width:clamp(108px,31vmin,210px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,#49534b,#303933);border:2px solid #958e7e;display:grid;place-items:center;touch-action:none;user-select:none}.knob{width:41%;height:41%;border-radius:50%;background:radial-gradient(circle at 35% 30%,#d2c8ae,#9c9787);box-shadow:0 4px 9px #121813;pointer-events:none}p{margin:0}#status{min-height:1.5em}button:disabled{opacity:.5}</style>
-<h1>Tay cầm phòng tranh</h1><form id="pair"><input id="code" maxlength="10" placeholder="Mã ghép" aria-label="Mã ghép" required><button>Kết nối</button></form><p id="status" role="status">Mở “Tay cầm” trên màn hình chiếu để lấy mã.</p><main><section><div class="stick" id="move"><div class="knob"></div></div>Di chuyển</section><section><div class="stick" id="look"><div class="knob"></div></div>Hướng nhìn</section></main><div><button id="doorAction" disabled>Mở cửa</button></div>
+<h1>Gallery Controller</h1><form id="pair"><input id="code" maxlength="10" placeholder="Pairing code" aria-label="Pairing code" required><button>Connect</button></form><p id="status" role="status">Select “Controller” on the gallery screen to get your pairing code.</p><main><section><div class="stick" id="move"><div class="knob"></div></div>Move</section><section><div class="stick" id="look"><div class="knob"></div></div>Look around</section></main><div><button id="doorAction" disabled>Open door</button></div>
 <script src="vendor/peerjs.min.js"></script><script>
 const statusBox=document.querySelector('#status'),state={mx:0,my:0,lx:0,ly:0};let peer,channel;
 function send(){if(channel?.open)channel.send(state)}
@@ -18,11 +18,11 @@ window.onblur=()=>resets.forEach(fn=>fn());
 setInterval(()=>{if(!document.hidden&&Object.values(state).some(Boolean))send()},90);
 doorAction.onclick=()=>{if(channel?.open)channel.send({action:'door'})};
 function connect(){
- const id=code.value.trim().toUpperCase();if(!/^[0-9A-F]{10}$/.test(id)){statusBox.textContent='Nhập mã 10 ký tự trên màn hình chiếu.';return}
- peer?.destroy();channel=null;doorAction.disabled=true;statusBox.textContent='Đang ghép với màn hình chiếu…';
+ const id=code.value.trim().toUpperCase();if(!/^[0-9A-F]{10}$/.test(id)){statusBox.textContent='Enter the 10-character code from the gallery screen.';return}
+ peer?.destroy();channel=null;doorAction.disabled=true;statusBox.textContent='Connecting to the gallery screen…';
  const current=new Peer();peer=current;
- function failed(){if(peer!==current)return;channel=null;doorAction.disabled=true;pair.hidden=false;statusBox.textContent='Chưa kết nối được. Kiểm tra mã và thử lại.'}
- current.on('error',failed);current.on('open',()=>{const conn=current.connect('ih-gallery-'+id,{reliable:true});channel=conn;conn.on('open',()=>{pair.hidden=true;doorAction.disabled=false;statusBox.textContent='Đã kết nối với màn hình chiếu'});conn.on('close',failed);conn.on('error',failed)});
+ function failed(){if(peer!==current)return;channel=null;doorAction.disabled=true;pair.hidden=false;statusBox.textContent='Could not connect. Check the code and try again.'}
+ current.on('error',failed);current.on('open',()=>{const conn=current.connect('ih-gallery-'+id,{reliable:true});channel=conn;conn.on('open',()=>{pair.hidden=true;doorAction.disabled=false;statusBox.textContent='Connected to the gallery screen'});conn.on('close',failed);conn.on('error',failed)});
  setTimeout(()=>{if(peer===current&&!channel?.open){current.destroy();failed()}},15000)
 }
 pair.onsubmit=e=>{e.preventDefault();connect()};code.value=location.hash.slice(1);if(code.value)connect();

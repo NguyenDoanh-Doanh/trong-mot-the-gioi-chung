@@ -87,7 +87,8 @@ door.style.transformOrigin='left center';
 let doorOpen=false;
 const promptButton=door.querySelector('button');
 function withinReach(){return outside && Math.hypot(x-100,z-803)<430}
-function openEntrance(){if(doorOpen||!withinReach())return;doorOpen=true;swing(true);promptButton.hidden=true;ui()}
+function setEntranceOpen(){if(doorOpen)return;doorOpen=true;swing(true);promptButton.hidden=true;ui()}
+function openEntrance(){if(withinReach())setEntranceOpen()}
 promptButton.onclick=openEntrance;
 function swing(open){door.style.transform=plane(0,35,803,'rotateY('+(open?92:0)+'deg)')}
 surface('floor',2000,1200,plane(0,250,1400,'rotateX(90deg)'));
@@ -443,6 +444,7 @@ function connectSharedGallery(){
    const state=readVisitorState(message);
    if(!guest||!state)return;
    guest.state=state;
+   if(message.doorOpen===true||state.z<800)setEntranceOpen();
    guest.seen=performance.now();
   });
   const forget=()=>roomGuests.delete(connection.peer);
@@ -471,6 +473,7 @@ function connectAsGuest(){
   connection.on('error',()=>retrySharedGallery(peer));
   connection.on('data',snapshot=>{
    if(roomPeer!==peer||snapshot?.type!=='visitors'||!Array.isArray(snapshot.people))return;
+   if(snapshot.doorOpen===true)setEntranceOpen();
    renderVisitors(snapshot.people);
   });
  });
@@ -546,13 +549,13 @@ function renderVisitors(people){
 
 setInterval(()=>{
  if(!localVisitor||!roomPeer?.open)return;
- const state={...localVisitor,x,z,yaw,stride:(stride/(2*Math.PI))%1,weight};
+ const state={...localVisitor,x,z,yaw,stride:(stride/(2*Math.PI))%1,weight,doorOpen};
  if(roomHost){
   const people=[{id:roomPeer.id,...state}];
   for(const [id,guest] of roomGuests){
    if(guest.state&&performance.now()-guest.seen<6000)people.push({id,...guest.state});
   }
-  const snapshot={type:'visitors',people};
+  const snapshot={type:'visitors',people,doorOpen};
   for(const {connection} of roomGuests.values())if(connection.open)connection.send(snapshot);
   renderVisitors(people);
  }else if(roomLink?.open)roomLink.send(state);
@@ -566,7 +569,8 @@ function animateVisitors(dt){
   guest.z+=(state.z-guest.z)*blend;
   const delta=state.yaw-guest.yaw;
   guest.yaw+=Math.atan2(Math.sin(delta),Math.cos(delta))*blend;
-  guest.root.style.transform=plane(guest.x,250,guest.z,'');
+  // Keep the avatar canvas facing the viewer even in the narrower inner room.
+  guest.root.style.transform=plane(guest.x,250,guest.z,'rotateY('+(-yaw)+'rad)');
   const cameraHeading=(yaw-guest.yaw)*180/Math.PI;
   const rear=guest.type===girlModel?0:180;
   guest.model.cameraOrbit=(rear+cameraHeading)+'deg 84deg auto';

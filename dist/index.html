@@ -184,10 +184,7 @@ function camera(focal){
   cx+=dx*distance;cz+=dz*distance;cy=22;tilt=pitch-Math.atan2(118,distance);
   avatar.style.transform=plane(x,250,z,'rotateY('+(-yaw)+'rad)');
   character.style.transform='translateY('+(-Math.abs(Math.sin(stride))*weight*5)+'px) rotate('+Math.sin(stride)*weight*2+'deg)';
-  if(character.availableAnimations?.length){
-   if(weight>.1 && character.paused)character.play();
-   else if(weight<=.1 && !character.paused)character.pause();
-  }
+  // Keep the model in its rest pose while the gallery animates each step.
  }
  return 'translateZ('+focal+'px) rotateX('+tilt+'rad) rotateY('+yaw+'rad) translate3d('+(-cx)+'px,'+(-cy)+'px,'+(-cz)+'px)'
 }

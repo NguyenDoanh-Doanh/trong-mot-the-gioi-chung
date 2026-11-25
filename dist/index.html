@@ -417,6 +417,7 @@ const roomStatus=document.getElementById('roomStatus');
 const visitors=new Map();
 const roomGuests=new Map();
 let localVisitor=null,roomPeer=null,roomLink=null,roomHost=false,roomRetry=0;
+let roomFailures=0,roomSignalRetry=0,roomEstablished=false;
 const girlModel='roblox-bacon-hair-girl',boyModel='roblox-bacon-hair';
 
 function configureWalk(model){
@@ -436,20 +437,23 @@ function joinSharedGallery(model){
 }
 
 function connectSharedGallery(){
- roomStatus.textContent='Connecting to the shared gallery…';
+ roomStatus.textContent=roomEstablished?'Restoring the shared connection…':'Connecting to the shared gallery…';
  if(typeof Peer!=="function"){
   roomStatus.textContent="Shared connection unavailable. You can still explore the gallery.";
   return;
  }
  const candidate=new Peer(sharedRoomId,{secure:true});
  roomPeer=candidate;
- const timeout=setTimeout(()=>{if(!candidate.open)retrySharedGallery(candidate)},9000);
+ const timeout=setTimeout(()=>{if(!candidate.open)retrySharedGallery(candidate)},20000);
  candidate.on("close",()=>clearTimeout(timeout));
  candidate.on('open',()=>{
   clearTimeout(timeout);
   if(roomPeer!==candidate)return;
+  const resumed=roomHost;
   roomHost=true;
-  updateRoomStatus(1);
+  roomEstablished=true;
+  roomFailures=0;
+  if(!resumed)updateRoomStatus(1);
  });
  candidate.on('connection',connection=>{
   if(roomPeer!==candidate||!roomHost){connection.close();return}
@@ -471,19 +475,25 @@ function connectSharedGallery(){
   if(error.type==='unavailable-id'){
    candidate.destroy();
    connectAsGuest();
-  }else retrySharedGallery(candidate);
+  }else if(!candidate.destroyed&&roomHost)restoreSignal(candidate);
+  else retrySharedGallery(candidate);
  });
- candidate.on('disconnected',()=>retrySharedGallery(candidate));
+ candidate.on('disconnected',()=>restoreSignal(candidate));
 }
 
 function connectAsGuest(){
  const peer=new Peer({secure:true});
  roomPeer=peer;
  peer.on('open',()=>{
-  if(roomPeer!==peer)return;
+  if(roomPeer!==peer||roomLink)return;
   const connection=peer.connect(sharedRoomId,{reliable:true});
   roomLink=connection;
-  connection.on('open',()=>updateRoomStatus(1));
+  connection.on('open',()=>{
+   clearTimeout(timeout);
+   roomFailures=0;
+   roomEstablished=true;
+   updateRoomStatus(1);
+  });
   connection.on('close',()=>retrySharedGallery(peer));
   connection.on('error',()=>retrySharedGallery(peer));
   connection.on('data',snapshot=>{
@@ -492,23 +502,37 @@ function connectAsGuest(){
    renderVisitors(snapshot.people);
   });
  });
- peer.on('error',()=>retrySharedGallery(peer));
- peer.on('disconnected',()=>retrySharedGallery(peer));
- const timeout=setTimeout(()=>{if(!roomLink?.open)retrySharedGallery(peer)},8000);
+ peer.on('error',()=>{
+  if(!peer.destroyed&&roomLink?.open)restoreSignal(peer);
+  else retrySharedGallery(peer);
+ });
+ peer.on('disconnected',()=>restoreSignal(peer));
+ const timeout=setTimeout(()=>{if(!roomLink?.open)retrySharedGallery(peer)},20000);
  peer.on('close',()=>clearTimeout(timeout));
+}
+
+function restoreSignal(peer){
+ if(roomPeer!==peer||peer.destroyed||!peer.disconnected)return;
+ clearTimeout(roomSignalRetry);
+ roomSignalRetry=setTimeout(()=>{
+  if(roomPeer!==peer||peer.destroyed||!peer.disconnected)return;
+  try{peer.reconnect()}catch{retrySharedGallery(peer)}
+ },1500);
 }
 
 function retrySharedGallery(peer){
  if(roomPeer!==peer)return;
+ clearTimeout(roomSignalRetry);
  roomPeer=null;
  roomLink=null;
  roomHost=false;
  roomGuests.clear();
  peer.destroy();
  renderVisitors([]);
- roomStatus.textContent='Reconnecting to the shared gallery… You can keep exploring.';
+ roomStatus.textContent='Shared connection interrupted. Retrying automatically…';
  clearTimeout(roomRetry);
- roomRetry=setTimeout(connectSharedGallery,900+Math.random()*1400);
+ const delay=Math.min(30000,2000*2**Math.min(roomFailures++,4));
+ roomRetry=setTimeout(connectSharedGallery,delay+Math.random()*1000);
 }
 
 function readVisitorState(data){
@@ -563,7 +587,7 @@ function renderVisitors(people){
 }
 
 setInterval(()=>{
- if(!localVisitor||!roomPeer?.open)return;
+ if(!localVisitor||!roomPeer||(!roomHost&&!roomLink?.open))return;
  const state={...localVisitor,x,z,yaw,stride:(stride/(2*Math.PI))%1,weight,doorOpen};
  if(roomHost){
   const people=[{id:roomPeer.id,...state}];

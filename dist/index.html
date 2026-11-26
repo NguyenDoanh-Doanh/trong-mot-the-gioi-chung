@@ -392,8 +392,17 @@ character.addEventListener('load',()=>{
   character.pause();
  }
 });
-const girlSource=prepareGirl().catch(()=>'roblox-bacon-hair-girl.glb');
-girlSource.then(url=>characterPicker.querySelector('[data-character="roblox-bacon-hair-girl"] model-viewer').src=url);
+let girlSource;
+function getGirlSource(){return girlSource??=prepareGirl().catch(()=>'roblox-bacon-hair-girl.glb')}
+const compactPicker=matchMedia('(pointer: coarse)').matches;
+if(compactPicker){
+ characterPicker.querySelectorAll('model-viewer').forEach(preview=>preview.remove());
+}else{
+ getGirlSource().then(url=>{
+  const preview=characterPicker.querySelector('[data-character="roblox-bacon-hair-girl"] model-viewer');
+  if(preview)preview.src=url;
+ });
+}
 characterPicker.showModal();
 characterPicker.addEventListener('cancel',event=>event.preventDefault());
 const galleryMusic=document.getElementById('galleryMusic');
@@ -412,15 +421,19 @@ for(const option of characterPicker.querySelectorAll('[data-character]')){
   const selected=option.dataset.character;
   document.getElementById('visitorName').blur();
   characterPicker.close();
+  characterPicker.querySelectorAll("model-viewer").forEach(preview=>preview.remove());
   playGalleryMusic();
   character.setAttribute('camera-orbit',selected==='roblox-bacon-hair-girl'?'0deg 84deg auto':'180deg 84deg auto');
   character.alt=option.textContent.trim();
-  const source=selected==='roblox-bacon-hair-girl'?girlSource:
+  function loadSelectedModel(){
+  const source=selected==='roblox-bacon-hair-girl'?getGirlSource():
    (boySource??=prepareBoy().catch(()=>selected+'.glb'));
   // A slow model download must never hold the character picker open.
   const fallback=setTimeout(()=>{if(!character.src)character.src=selected+'.glb'},4500);
   source.then(url=>{clearTimeout(fallback);character.src=url});
-  joinSharedGallery(selected);
+  }
+  requestAnimationFrame(()=>setTimeout(loadSelectedModel,0));
+  setTimeout(()=>joinSharedGallery(selected),0);
  };
 }
 
@@ -586,7 +599,7 @@ function renderVisitors(people){
   }
   if(guest.type!==state.model){
    guest.type=state.model;
-   const source=state.model===girlModel?girlSource:(boySource??=prepareBoy().catch(()=>boyModel+'.glb'));
+   const source=state.model===girlModel?getGirlSource():(boySource??=prepareBoy().catch(()=>boyModel+'.glb'));
    source.then(url=>{if(guest.type===state.model)guest.model.src=url});
   }
   guest.tag.textContent=state.name;
